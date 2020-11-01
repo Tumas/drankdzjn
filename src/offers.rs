@@ -1,6 +1,6 @@
 use log::{debug, info};
 use math::round;
-use prettytable::{Table, Row, Cell};
+use prettytable::{Attr, Cell, color, Row, Table};
 use serde::Deserialize;
 
 use crate::APP_USER_AGENT;
@@ -134,7 +134,9 @@ pub async fn list(price: u16, discount: u16) -> Result<(), reqwest::Error> {
                 Cell::new(&whiskey.description),
                 Cell::new(&whiskey.price().to_string()),
                 Cell::new(&whiskey.price.to_string()),
-                Cell::new(&whiskey.discount().to_string()),
+                Cell::new(&whiskey.discount().to_string())
+                    .with_style(Attr::Bold)
+                    .with_style(Attr::ForegroundColor(color::GREEN)),
                 Cell::new(&whiskey.availability),
                 Cell::new(&whiskey.categorie().unwrap_or_default()),
                 Cell::new(&whiskey.percentage().unwrap_or_default()),
