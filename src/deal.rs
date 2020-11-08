@@ -1,4 +1,5 @@
 use log::info;
+use regex::Regex;
 use serde::Deserialize;
 
 use crate::APP_USER_AGENT;
@@ -29,6 +30,27 @@ async fn ping(client: &reqwest::Client, url: &str) -> Result<bool, reqwest::Erro
     Ok(status)
 }
 
+fn candidates(base_url: &str) -> Vec<String> {
+    let mut results = vec![];
+    let add_dd = |url: &str| url.replace("-de-", "-de-dd-");
+
+    // no change, de -> de-dd
+    results.push(add_dd(base_url));
+
+    // without numbers, de -> de-dd
+    let mut parts: Vec<&str> = base_url.split("/").collect();
+
+    if let Some(title) = parts.pop() {
+        let re = Regex::new(r"[0-9]").expect("Number regexp must be valid");
+        let title = re.replace_all(title, "").to_string();
+        let result = add_dd(&format!("{}/{}", parts.join("/"), title));
+
+        results.push(result);
+    }
+
+    results
+}
+
 pub async fn find(stop_when_found: bool) -> Result<(), reqwest::Error> {
     let client = reqwest::Client::builder()
         .user_agent(APP_USER_AGENT)
@@ -45,14 +67,32 @@ pub async fn find(stop_when_found: bool) -> Result<(), reqwest::Error> {
             info!("Skipping banner: {}", banner.imgsrc);
         }
 
-        let img_url = format!("https://res.cloudinary.com/boozeboodcdn/image/upload/{}", banner.imgsrc);
-        let simple_attempt_url = img_url.replace("-de-", "-de-dd-");
-        let success = ping(&client, &simple_attempt_url).await?;
+        for candidate_url in &candidates(&banner.imgsrc) {
+            let img_url = format!("https://res.cloudinary.com/boozeboodcdn/image/upload/{}", candidate_url);
+            let success = ping(&client, &img_url).await?;
 
-        if stop_when_found && success {
-            return Ok(())
+            if stop_when_found && success {
+                return Ok(())
+            }
         }
+
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::candidates;
+
+    #[test]
+    fn tests_candidates() {
+        assert_eq!(
+            candidates("homepage/drankdozijn/drankdozijn-enjoyislay20-de-lagavulin.jpg"),
+            vec![
+                "homepage/drankdozijn/drankdozijn-enjoyislay20-de-dd-lagavulin.jpg",
+                "homepage/drankdozijn/drankdozijn-enjoyislay-de-dd-lagavulin.jpg"
+            ]
+        )
+    }
 }
