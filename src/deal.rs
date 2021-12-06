@@ -1,20 +1,27 @@
 use log::info;
 use regex::Regex;
+use reqwest::Client;
 use serde::Deserialize;
 
-use crate::APP_USER_AGENT;
+use crate::{offers, APP_USER_AGENT};
 
-const BASE_URL: &str = "https://es-api.drankdozijn.nl/home?top_level_domain=de&country=DE&language=de";
+const BASE_URL: &str =
+    "https://es-api.drankdozijn.nl/home?top_level_domain=de&country=DE&language=de";
 
 #[derive(Debug, Deserialize)]
-struct Banner {
+pub struct Banner {
     imgsrc: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct HomeResponse {
+pub struct HomeResponse {
     #[serde(default, rename(deserialize = "homeGridBanners"))]
-    banners: Vec<Banner>
+    banners: Vec<Banner>,
+}
+
+async fn fetch_home_reponse(client: &Client) -> Result<HomeResponse, reqwest::Error> {
+    let resp = client.get(BASE_URL).send().await?;
+    resp.json::<HomeResponse>().await
 }
 
 async fn ping(client: &reqwest::Client, url: &str) -> Result<bool, reqwest::Error> {
@@ -57,9 +64,34 @@ pub async fn find(stop_when_found: bool) -> Result<(), reqwest::Error> {
         .build()
         .expect("HTTP client should be buildable");
 
-    let resp = client.get(BASE_URL).send().await?;
-    let response = resp.json::<HomeResponse>().await?;
+    let response = fetch_home_reponse(&client).await?;
+    let sample_url = &response
+        .banners
+        .first()
+        .expect("At least one banner must be present")
+        .imgsrc;
 
+    let re = Regex::new(r"(.+-de-).+(.jpg)").expect("regexp must be valid");
+    let template = re.replace(&sample_url, "$1{}$2");
+
+    info!("Using template {}", template);
+
+    let found = find_by_banners(&client, &response, stop_when_found).await?;
+
+    if stop_when_found && found {
+        return Ok(());
+    }
+
+    find_by_iteration(&client, &template, stop_when_found).await?;
+
+    Ok(())
+}
+
+pub async fn find_by_banners(
+    client: &Client,
+    response: &HomeResponse,
+    stop_when_found: bool,
+) -> Result<bool, reqwest::Error> {
     info!("Found {} home banners", response.banners.len());
 
     for banner in &response.banners {
@@ -67,18 +99,57 @@ pub async fn find(stop_when_found: bool) -> Result<(), reqwest::Error> {
             info!("Skipping banner: {}", banner.imgsrc);
         }
 
-        for candidate_url in &candidates(&banner.imgsrc) {
-            let img_url = format!("https://res.cloudinary.com/boozeboodcdn/image/upload/{}", candidate_url);
-            let success = ping(&client, &img_url).await?;
-
-            if stop_when_found && success {
-                return Ok(())
-            }
+        let success = check_url(client, &banner.imgsrc, stop_when_found).await?;
+        if stop_when_found && success {
+            return Ok(success);
         }
-
     }
 
-    Ok(())
+    Ok(false)
+}
+
+pub async fn check_url(
+    client: &Client,
+    url: &str,
+    stop_when_found: bool,
+) -> Result<bool, reqwest::Error> {
+    for candidate_url in &candidates(url) {
+        let img_url = format!(
+            "https://res.cloudinary.com/boozeboodcdn/image/upload/{}",
+            candidate_url
+        );
+        let success = ping(client, &img_url).await?;
+
+        if stop_when_found && success {
+            return Ok(success);
+        }
+    }
+
+    Ok(false)
+}
+
+pub async fn find_by_iteration(
+    client: &Client,
+    template: &str,
+    stop_when_found: bool,
+) -> Result<bool, reqwest::Error> {
+    let whiskeys = offers::whiskeys().await?;
+    let brands = whiskeys
+        .iter()
+        .filter_map(|whiskey| whiskey.brand())
+        .map(|brand| brand.to_lowercase().replace(" ", "-"))
+        .collect::<Vec<String>>();
+
+    for brand in brands {
+        let url = template.replace("{}", &brand);
+        let success = check_url(client, &url, stop_when_found).await?;
+
+        if stop_when_found && success {
+            return Ok(success);
+        }
+    }
+
+    Ok(false)
 }
 
 #[cfg(test)]

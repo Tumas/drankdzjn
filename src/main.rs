@@ -1,14 +1,12 @@
-#[macro_use] extern crate colour;
-#[macro_use] extern crate prettytable;
+#[macro_use]
+extern crate colour;
+#[macro_use]
+extern crate prettytable;
 
 use structopt::StructOpt;
 use structopt_flags::{LogLevel, LogLevelOpt};
 
-const APP_USER_AGENT: &str = concat!(
-    env!("CARGO_PKG_NAME"),
-    "/",
-    env!("CARGO_PKG_VERSION"),
-);
+const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 #[derive(Debug, StructOpt)]
 struct Opt {
@@ -16,27 +14,27 @@ struct Opt {
     log_level: LogLevelOpt,
 
     #[structopt(flatten)]
-    command: Subcommands
+    command: Subcommands,
 }
 
 #[derive(Debug, StructOpt)]
 enum Subcommands {
     Offers {
-        #[structopt(short, long, default_value = "50")]
+        #[structopt(short, long, default_value = "100")]
         price: u16,
-    
+
         #[structopt(short, long, default_value = "5")]
         discount: u16,
     },
 
     Deal {
         #[structopt(short, long)]
-        stop_when_found: bool       
-    }
+        stop_when_found: bool,
+    },
 }
 
-mod offers;
 mod deal;
+mod offers;
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
@@ -45,8 +43,9 @@ async fn main() -> Result<(), reqwest::Error> {
     simplelog::TermLogger::init(
         log_level.get_level_filter(),
         simplelog::Config::default(),
-        simplelog::TerminalMode::Stdout
-    ).ok();
+        simplelog::TerminalMode::Stdout,
+    )
+    .ok();
 
     match command {
         Subcommands::Offers { price, discount } => offers::list(price, discount).await?,
