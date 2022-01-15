@@ -43,7 +43,8 @@ async fn main() -> Result<(), reqwest::Error> {
     simplelog::TermLogger::init(
         log_level.get_level_filter(),
         simplelog::Config::default(),
-        simplelog::TerminalMode::Stdout,
+        simplelog::TerminalMode::Mixed,
+        simplelog::ColorChoice::Auto,
     )
     .ok();
 

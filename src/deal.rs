@@ -35,7 +35,7 @@ pub async fn find(stop_when_found: bool) -> Result<(), reqwest::Error> {
         .imgsrc;
 
     let re = Regex::new(r"(.+-de-).+(.jpg)").expect("regexp must be valid");
-    let template = re.replace(&sample_url, "$1{}$2");
+    let template = re.replace(sample_url, "$1{}$2");
 
     info!("Using template {}", template);
 
@@ -125,7 +125,7 @@ fn candidates(base_url: &str) -> HashSet<String> {
     results.insert(add_dd(base_url));
 
     // without numbers after de -> de-dd
-    let mut parts: Vec<&str> = base_url.split("/").collect();
+    let mut parts: Vec<&str> = base_url.split('/').collect();
 
     if let Some(title) = parts.pop() {
         let re = Regex::new(r"(?P<prefix>-de-[^0-9,-]*)-*[0-9]*-*").expect("Regexp must be valid");
